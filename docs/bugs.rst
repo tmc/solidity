@@ -33,6 +33,8 @@ contracts should consult this list according to the following criteria:
 The JSON file of known bugs below is an array of objects, one for each bug,
 with the following keys:
 
+uid
+    Unique identifier given to the bug in the form of ``SOL-<year>-<number>``
 name
     Unique name given to the bug
 summary
