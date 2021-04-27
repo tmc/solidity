@@ -123,6 +123,13 @@ private:
 	std::set<unsigned> transactionVerificationTargetsIds(ASTNode const* _txRoot);
 	//@}
 
+	/// Abstraction helpers.
+	//@{
+	/// @returns true if _function is Natspec annotated to be abstracted by
+	/// nondeterministic values.
+	bool abstractAsNondet(FunctionDefinition const& _function);
+	//@}
+
 	/// Sort helpers.
 	//@{
 	smtutil::SortPointer sort(FunctionDefinition const& _function);

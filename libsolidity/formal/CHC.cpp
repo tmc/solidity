@@ -219,7 +219,10 @@ bool CHC::visit(FunctionDefinition const& _function)
 	if (!m_currentContract)
 		return false;
 
-	if (!_function.isImplemented())
+	if (
+		!_function.isImplemented() ||
+		abstractAsNondet(_function)
+	)
 	{
 		addRule(summary(_function), "summary_function_" + to_string(_function.id()));
 		return false;
@@ -262,7 +265,10 @@ void CHC::endVisit(FunctionDefinition const& _function)
 	if (!m_currentContract)
 		return;
 
-	if (!_function.isImplemented())
+	if (
+		!_function.isImplemented() ||
+		abstractAsNondet(_function)
+	)
 		return;
 
 	solAssert(m_currentFunction && m_currentContract, "");
@@ -999,6 +1005,21 @@ set<unsigned> CHC::transactionVerificationTargetsIds(ASTNode const* _txRoot)
 			_addChild({{}, called});
 	});
 	return verificationTargetsIds;
+}
+
+bool CHC::abstractAsNondet(FunctionDefinition const& _function)
+{
+	auto const& tags = _function.annotation().docTags;
+	string smtStr = "custom:smtchecker";
+	for (auto it = tags.find(smtStr); it != tags.end() && it->first == smtStr; ++it)
+	{
+		string const& content = it->second.content;
+		if (content == "abstract-function-nondet")
+			return true;
+		else
+			m_errorReporter.warning(3130_error, _function.location(), "Unknown option for \"custom:smtchecker\": \"" + content + "\"");
+	}
+	return false;
 }
 
 SortPointer CHC::sort(FunctionDefinition const& _function)
