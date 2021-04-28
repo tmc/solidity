@@ -23,6 +23,7 @@
 #include <string>
 #include <tuple>
 #include <boost/test/unit_test.hpp>
+#include <boost/algorithm/string/trim.hpp>
 #include <liblangutil/Exceptions.h>
 #include <test/ExecutionFramework.h>
 
@@ -42,10 +43,10 @@ using Mode = FunctionCall::DisplayMode;
 namespace
 {
 
-vector<FunctionCall> parse(string const& _source)
+vector<FunctionCall> parse(string const& _source, std::map<std::string, Builtin> const& _builtins = {})
 {
 	istringstream stream{_source, ios_base::out};
-	TestFileParser parser{stream, {}};
+	TestFileParser parser{stream, _builtins};
 	return parser.parseFunctionCalls(0);
 }
 
@@ -956,6 +957,43 @@ BOOST_AUTO_TEST_CASE(library)
 		false,
 		true
 	);
+}
+
+BOOST_AUTO_TEST_CASE(call_effects)
+{
+	std::map<std::string, Builtin> builtins;
+	builtins["builtin_returning_call_effect"] = [](FunctionCall const&) -> std::optional<bytes>
+	{
+	  return util::toBigEndian(u256(0x1234));
+	};
+	char const* source = R"(
+		// builtin_returning_call_effect -> 1
+		// - bla
+		// - bla bla
+		// - bla bla bla
+	)";
+	vector<FunctionCall> calls = parse(source, builtins);
+	BOOST_REQUIRE_EQUAL(calls.size(), 1);
+	BOOST_REQUIRE_EQUAL(calls[0].effects.size(), 3);
+	BOOST_REQUIRE_EQUAL(boost::trim_copy(calls[0].effects[0]), "bla");
+	BOOST_REQUIRE_EQUAL(boost::trim_copy(calls[0].effects[1]), "bla bla");
+	BOOST_REQUIRE_EQUAL(boost::trim_copy(calls[0].effects[2]), "bla bla bla");
+	source = R"(
+		// builtin_returning_call_effect -> 1
+		// - bla
+		// - bla bla
+		// builtin_returning_call_effect -> 2
+		// - bla bla bla
+		// builtin_returning_call_effect -> 3
+	)";
+	calls = parse(source, builtins);
+	BOOST_REQUIRE_EQUAL(calls.size(), 3);
+	BOOST_REQUIRE_EQUAL(calls[0].effects.size(), 2);
+	BOOST_REQUIRE_EQUAL(calls[1].effects.size(), 1);
+	BOOST_REQUIRE_EQUAL(calls[2].effects.size(), 0);
+	BOOST_REQUIRE_EQUAL(boost::trim_copy(calls[0].effects[0]), "bla");
+	BOOST_REQUIRE_EQUAL(boost::trim_copy(calls[0].effects[1]), "bla bla");
+	BOOST_REQUIRE_EQUAL(boost::trim_copy(calls[1].effects[0]), "bla bla bla");
 }
 
 BOOST_AUTO_TEST_SUITE_END()

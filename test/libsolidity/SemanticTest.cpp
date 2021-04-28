@@ -123,7 +123,12 @@ void SemanticTest::initializeBuiltins()
 	solAssert(m_builtins.count("smokeTest") == 0, "");
 	m_builtins["smokeTest"] = [](FunctionCall const&) -> std::optional<bytes>
 	{
-		return util::toBigEndian(u256(0x1234));
+	  return util::toBigEndian(u256(0x1234));
+	};
+	solAssert(m_builtins.count("effectsTest") == 0, "");
+	m_builtins["effectsTest"] = [](FunctionCall const&) -> std::optional<bytes>
+	{
+		return util::toBigEndian(u256(0x2345));
 	};
 	soltestAssert(m_builtins.count("balance") == 0, "");
 	m_builtins["balance"] = [this](FunctionCall const& _call) -> std::optional<bytes>
@@ -142,6 +147,38 @@ void SemanticTest::initializeBuiltins()
 		soltestAssert(_call.arguments.parameters.empty(), "No arguments expected.");
 		return toBigEndian(u256(storageEmpty(m_contractAddress) ? 1 : 0));
 	};
+
+	m_hooks.emplace_back(
+		[](FunctionCall const& _call) -> std::vector<std::string>
+		{
+			if (_call.signature.find("effectsTest") != string::npos)
+				return {_call.signature + "0"};
+			return {};
+		}
+	);
+	m_hooks.emplace_back(
+		[](FunctionCall const& _call) -> std::vector<std::string>
+		{
+			if (_call.signature.find("effectsTest") != string::npos)
+				return {_call.signature + "1", _call.signature + "2"};
+			return {};
+		}
+	);
+}
+
+void SemanticTest::updateEffectsOfCall(FunctionCall const& _call)
+{
+	if (m_effects[&_call].empty())
+		for (auto const& hook: m_hooks)
+			for (auto const& effect: hook(_call))
+				m_effects[&_call].emplace_back(effect);
+}
+
+vector<string> SemanticTest::effectsOfCall(FunctionCall const& _call) const
+{
+	if (m_effects.find(&_call) != m_effects.end())
+		return m_effects.at(&_call);
+	return {};
 }
 
 TestCase::TestResult SemanticTest::run(ostream& _stream, string const& _linePrefix, bool _formatted)
@@ -299,6 +336,9 @@ TestCase::TestResult SemanticTest::runTest(
 			test.setRawBytes(std::move(output));
 			test.setContractABI(m_compiler.contractABI(m_compiler.lastContractName(m_sources.mainSourceFile)));
 		}
+
+		updateEffectsOfCall(test.call());
+		success &= test.call().effects == effectsOfCall(test.call());
 	}
 
 	if (!m_testCaseWantsYulRun && _isYulRun)
@@ -347,7 +387,8 @@ TestCase::TestResult SemanticTest::runTest(
 				_linePrefix,
 				TestFunctionCall::RenderMode::ExpectedValuesExpectedGas,
 				_formatted,
-				/* _interactivePrint */ true
+				/* _interactivePrint */ true,
+				effectsOfCall(test.call())
 			) << endl;
 			_stream << errorReporter.format(_linePrefix, _formatted);
 		}
@@ -361,7 +402,8 @@ TestCase::TestResult SemanticTest::runTest(
 				_linePrefix,
 				m_gasCostFailure ? TestFunctionCall::RenderMode::ExpectedValuesActualGas : TestFunctionCall::RenderMode::ActualValuesExpectedGas,
 				_formatted,
-				/* _interactivePrint */ true
+				/* _interactivePrint */ true,
+				effectsOfCall(test.call())
 			) << endl;
 			_stream << errorReporter.format(_linePrefix, _formatted);
 		}
@@ -483,7 +525,8 @@ void SemanticTest::printUpdatedExpectations(ostream& _stream, string const&) con
 		_stream << test.format(
 			"",
 			m_gasCostFailure ? TestFunctionCall::RenderMode::ExpectedValuesActualGas : TestFunctionCall::RenderMode::ActualValuesExpectedGas,
-			/* _highlight = */ false
+			/* _highlight = */ false,
+			effectsOfCall(test.call())
 		) << endl;
 }
 

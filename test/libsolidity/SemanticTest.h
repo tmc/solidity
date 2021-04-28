@@ -81,6 +81,8 @@ private:
 	TestResult runTest(std::ostream& _stream, std::string const& _linePrefix, bool _formatted, bool _isYulRun, bool _isEwasmRun);
 	bool checkGasCostExpectation(TestFunctionCall& io_test, bool _compileViaYul) const;
 	void initializeBuiltins();
+	void updateEffectsOfCall(FunctionCall const& _call);
+	std::vector<std::string> effectsOfCall(FunctionCall const& _call) const;
 	SourceMap m_sources;
 	std::size_t m_lineOffset;
 	std::vector<TestFunctionCall> m_tests;
@@ -94,10 +96,11 @@ private:
 	bool m_canEnableYulRun = false;
 	bool m_canEnableEwasmRun = false;
 	std::map<std::string, Builtin> m_builtins{};
-
+	std::vector<Hook> m_hooks{};
 	bool m_gasCostFailure = false;
 	bool m_enforceGasCost = false;
 	u256 m_enforceGasCostMinValue;
+	std::map<FunctionCall const*, std::vector<std::string>> m_effects{};
 };
 
 }
