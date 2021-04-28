@@ -58,6 +58,7 @@ SemanticTest::SemanticTest(
 	m_sources(m_reader.sources()),
 	m_lineOffset(m_reader.lineNumber()),
 	m_builtins(makeBuiltins()),
+	m_sideEffectHooks(makeSideEffectHooks()),
 	m_enforceViaYul(_enforceViaYul),
 	m_enforceCompileToEwasm(_enforceCompileToEwasm),
 	m_enforceGasCost(_enforceGasCost),
@@ -126,6 +127,13 @@ map<string, Builtin> SemanticTest::makeBuiltins() const
 			}
 		},
 		{
+			"smokeTest2",
+			[](FunctionCall const&) -> optional<bytes>
+			{
+				return util::toBigEndian(u256(0x2345));
+			}
+		},
+		{
 			"balance",
 			[this](FunctionCall const& _call) -> optional<bytes>
 			{
@@ -143,10 +151,43 @@ map<string, Builtin> SemanticTest::makeBuiltins() const
 			[this](FunctionCall const& _call) -> optional<bytes>
 			{
 				soltestAssert(_call.arguments.parameters.empty(), "No arguments expected.");
-				  return toBigEndian(u256(storageEmpty(m_contractAddress) ? 1 : 0));
-		 	}
+				return toBigEndian(u256(storageEmpty(m_contractAddress) ? 1 : 0));
+			}
+		},
+	};
+}
+
+vector<SideEffectHook> SemanticTest::makeSideEffectHooks() const
+{
+	return {
+		[](FunctionCall const& _call) -> vector<string>
+		{
+			if (_call.signature.find("smokeTest2") != string::npos)
+				return {_call.signature + "0"};
+			return {};
+		},
+		[](FunctionCall const& _call) -> vector<string>
+		{
+			if (_call.signature.find("smokeTest2") != string::npos)
+				return {_call.signature + "1", _call.signature + "2"};
+			return {};
 		}
 	};
+}
+
+void SemanticTest::updateSideEffects(FunctionCall const& _call)
+{
+	m_sideEffects[&_call].clear();
+	for (auto const& hook: m_sideEffectHooks)
+		for (auto const& effect: hook(_call))
+			m_sideEffects[&_call].emplace_back(effect);
+}
+
+vector<string> SemanticTest::sideEffects(FunctionCall const& _call) const
+{
+	if (m_sideEffects.find(&_call) != m_sideEffects.end())
+		return m_sideEffects.at(&_call);
+	return {};
 }
 
 TestCase::TestResult SemanticTest::run(ostream& _stream, string const& _linePrefix, bool _formatted)
@@ -304,6 +345,9 @@ TestCase::TestResult SemanticTest::runTest(
 			test.setRawBytes(move(output));
 			test.setContractABI(m_compiler.contractABI(m_compiler.lastContractName(m_sources.mainSourceFile)));
 		}
+
+		updateSideEffects(test.call());
+		success &= test.call().sideEffects == sideEffects(test.call());
 	}
 
 	if (!m_testCaseWantsYulRun && _isYulRun)
@@ -352,7 +396,8 @@ TestCase::TestResult SemanticTest::runTest(
 				_linePrefix,
 				TestFunctionCall::RenderMode::ExpectedValuesExpectedGas,
 				_formatted,
-				/* _interactivePrint */ true
+				/* _interactivePrint */ true,
+				sideEffects(test.call())
 			) << endl;
 			_stream << errorReporter.format(_linePrefix, _formatted);
 		}
@@ -366,7 +411,8 @@ TestCase::TestResult SemanticTest::runTest(
 				_linePrefix,
 				m_gasCostFailure ? TestFunctionCall::RenderMode::ExpectedValuesActualGas : TestFunctionCall::RenderMode::ActualValuesExpectedGas,
 				_formatted,
-				/* _interactivePrint */ true
+				/* _interactivePrint */ true,
+				sideEffects(test.call())
 			) << endl;
 			_stream << errorReporter.format(_linePrefix, _formatted);
 		}
@@ -488,7 +534,8 @@ void SemanticTest::printUpdatedExpectations(ostream& _stream, string const&) con
 		_stream << test.format(
 			"",
 			m_gasCostFailure ? TestFunctionCall::RenderMode::ExpectedValuesActualGas : TestFunctionCall::RenderMode::ActualValuesExpectedGas,
-			/* _highlight = */ false
+			/* _highlight = */ false,
+			sideEffects(test.call())
 		) << endl;
 }
 

@@ -37,8 +37,8 @@ string TestFunctionCall::format(
 	string const& _linePrefix,
 	RenderMode _renderMode,
 	bool const _highlight,
-	bool const _interactivePrint
-) const
+	bool const _interactivePrint,
+	vector<string> const & _sideEffects) const
 {
 	stringstream stream;
 
@@ -197,6 +197,17 @@ string TestFunctionCall::format(
 		}
 
 		stream << formatGasExpectations(_linePrefix, _renderMode == RenderMode::ExpectedValuesActualGas, _interactivePrint);
+
+		if (!_sideEffects.empty())
+		{
+			stream << std::endl;
+			for (string const& effect: _sideEffects)
+			{
+				stream << _linePrefix << "// - " << effect;
+				if (effect != *_sideEffects.rbegin())
+					stream << std::endl;
+			}
+		}
 	};
 
 	formatOutput(m_call.displayMode == FunctionCall::DisplayMode::SingleLine);

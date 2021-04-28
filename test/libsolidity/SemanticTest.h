@@ -81,10 +81,15 @@ private:
 	TestResult runTest(std::ostream& _stream, std::string const& _linePrefix, bool _formatted, bool _isYulRun, bool _isEwasmRun);
 	bool checkGasCostExpectation(TestFunctionCall& io_test, bool _compileViaYul) const;
 	std::map<std::string, Builtin> makeBuiltins() const;
+	std::vector<SideEffectHook> makeSideEffectHooks() const;
+	void updateSideEffects(FunctionCall const& _call);
+	std::vector<std::string> sideEffects(FunctionCall const& _call) const;
 	SourceMap m_sources;
 	std::size_t m_lineOffset;
 	std::vector<TestFunctionCall> m_tests;
 	std::map<std::string, Builtin> const m_builtins;
+	std::vector<SideEffectHook> const m_sideEffectHooks;
+	std::map<FunctionCall const*, std::vector<std::string>> m_sideEffects;
 	bool m_testCaseWantsYulRun = false;
 	bool m_testCaseWantsEwasmRun = false;
 	bool m_testCaseWantsLegacyRun = true;

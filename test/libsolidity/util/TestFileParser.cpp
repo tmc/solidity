@@ -154,6 +154,8 @@ vector<solidity::frontend::test::FunctionCall> TestFileParser::parseFunctionCall
 								call.kind = FunctionCall::Kind::Constructor;
 						}
 
+						call.sideEffects = parseFunctionCallSideEffects();
+
 						calls.emplace_back(std::move(call));
 					}
 				}
@@ -167,6 +169,25 @@ vector<solidity::frontend::test::FunctionCall> TestFileParser::parseFunctionCall
 		}
 	}
 	return calls;
+}
+
+vector<string> TestFileParser::parseFunctionCallSideEffects()
+{
+	vector<string> result;
+	while (accept(Token::Effect, false))
+	{
+		string effect = m_scanner.currentLiteral();
+		result.emplace_back(effect);
+
+		if (m_scanner.currentToken() == Token::Effect)
+			m_scanner.scanNextToken();
+		if (m_scanner.currentToken() == Token::Newline)
+			m_scanner.scanNextToken();
+		if (m_scanner.currentToken() == Token::EOS)
+			break;
+	}
+
+	return result;
 }
 
 bool TestFileParser::accept(Token _token, bool const _expect)
@@ -542,6 +563,11 @@ void TestFileParser::Scanner::scanNextToken()
 				advance();
 				selectToken(Token::Arrow);
 			}
+			else if (peek() == ' ')
+			{
+				advance();
+				selectToken(Token::Effect, scanEffectString());
+			}
 			else
 				selectToken(Token::Sub);
 			break;
@@ -599,6 +625,17 @@ void TestFileParser::Scanner::scanNextToken()
 		}
 	}
 	while (m_currentToken == Token::Whitespace);
+}
+
+string TestFileParser::Scanner::scanEffectString()
+{
+	string effect;
+	while (peek() != '/' && peek() != '\0')
+	{
+		advance();
+		effect += current();
+	}
+	return effect;
 }
 
 string TestFileParser::Scanner::scanComment()

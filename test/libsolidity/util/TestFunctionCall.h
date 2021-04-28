@@ -68,7 +68,8 @@ public:
 		std::string const& _linePrefix = "",
 		RenderMode _renderMode = RenderMode::ExpectedValuesExpectedGas,
 		bool const _highlight = false,
-		bool const _interactivePrint = false
+		bool const _interactivePrint = false,
+		std::vector<std::string> const & _sideEffects = {}
 	) const;
 
 	/// Overloaded version that passes an error reporter which is never used outside
@@ -76,11 +77,12 @@ public:
 	std::string format(
 		std::string const& _linePrefix = "",
 		RenderMode const _renderMode = RenderMode::ExpectedValuesExpectedGas,
-		bool const _highlight = false
+		bool const _highlight = false,
+		std::vector<std::string> const & _sideEffects = {}
 	) const
 	{
 		ErrorReporter reporter;
-		return format(reporter, _linePrefix, _renderMode, _highlight);
+		return format(reporter, _linePrefix, _renderMode, _highlight, false, _sideEffects);
 	}
 
 	/// Resets current results in case the function was called and the result
