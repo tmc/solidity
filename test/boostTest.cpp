@@ -183,7 +183,16 @@ test_suite* init_unit_test_suite( int /*argc*/, char* /*argv*/[] )
 		exit(1);
 	}
 	if (disableSemantics)
-		cout << endl << "--- SKIPPING ALL SEMANTICS TESTS ---" << endl << endl;
+	{
+		if (!solidity::test::CommonOptions::get().disableSemanticTests)
+		{
+			cerr << "Error: Semantic tests can not be run due to missing VM. "
+				"Pass --no-semantic-tests to progress anyway or install a VM." << endl;
+			exit(1);
+		}
+		else
+			cout << endl << "--- SKIPPING ALL SEMANTICS TESTS ---" << endl << endl;
+	}
 
 	// Include the interactive tests in the automatic tests as well
 	for (auto const& ts: g_interactiveTestsuites)

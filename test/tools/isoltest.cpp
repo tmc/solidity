@@ -454,7 +454,16 @@ int main(int argc, char const *argv[])
 	}
 
 	if (disableSemantics)
-		cout << endl << "--- SKIPPING ALL SEMANTICS TESTS ---" << endl << endl;
+	{
+		if (!options.disableSemanticTests)
+		{
+			cerr << "Error: Semantic tests can not be run due to missing VM. "
+				"Pass --no-semantic-tests to progress anyway or install a VM." << endl;
+			exit(1);
+		}
+		else
+			cout << endl << "--- SKIPPING ALL SEMANTICS TESTS ---" << endl << endl;
+	}
 
 	TestStats global_stats{0, 0};
 	cout << "Running tests..." << endl << endl;

@@ -62,6 +62,7 @@ struct CommonOptions
 	bool enforceCompileToEwasm = false;
 	bool enforceGasTest = false;
 	u256 enforceGasTestMinValue = 100000;
+	bool disableSemanticTests = false;
 	bool disableSMT = false;
 	bool useABIEncoderV1 = false;
 	bool showMessages = false;
