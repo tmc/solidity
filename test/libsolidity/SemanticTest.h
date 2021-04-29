@@ -83,6 +83,7 @@ private:
 	void initializeBuiltins();
 	void updateEffectsOfCall(FunctionCall const& _call);
 	std::vector<std::string> effectsOfCall(FunctionCall const& _call) const;
+	std::vector<std::string> eventHook(FunctionCall const&) const;
 	SourceMap m_sources;
 	std::size_t m_lineOffset;
 	std::vector<TestFunctionCall> m_tests;

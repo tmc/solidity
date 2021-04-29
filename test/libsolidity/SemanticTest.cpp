@@ -164,6 +164,24 @@ void SemanticTest::initializeBuiltins()
 			return {};
 		}
 	);
+	using namespace placeholders;
+	m_hooks.emplace_back(bind(&SemanticTest::eventHook, this, _1));
+}
+
+vector<string> SemanticTest::eventHook(FunctionCall const&) const
+{
+	vector<LogRecord> recordedLogs = ExecutionFramework::recordedLogs();
+	vector<string> effects;
+	for (auto const& log: recordedLogs)
+	{
+		effects.emplace_back("log[" + std::to_string(log.index) + "]");
+		effects.emplace_back("  creator=" + log.creator.hex());
+		effects.emplace_back("  data=" + util::toHex(log.data));
+		uint32_t index = 0;
+		for (auto& topic: log.topics)
+			effects.emplace_back("  topic[" + std::to_string(index++) + "]=" + topic.hex());
+	}
+	return effects;
 }
 
 void SemanticTest::updateEffectsOfCall(FunctionCall const& _call)
