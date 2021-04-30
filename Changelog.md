@@ -6,6 +6,7 @@ Language Features:
 
 
 Compiler Features:
+ * SMTChecker: Function definitions can be annotated with the custom Natspec tag ``custom:smtchecker abstract-function-nondet`` to be abstracted by a nondeterministic value when called.
  * Yul Optimizer: Evaluate ``keccak256(a, c)``, when the value at memory location ``a`` is known at compile time and ``c`` is a constant ``<= 32``.
 
 
