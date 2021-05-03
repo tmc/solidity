@@ -43,10 +43,91 @@ using namespace std::placeholders;
 using namespace solidity::langutil;
 using namespace solidity::frontend;
 
+#include <variant>
+
 namespace solidity::lsp {
 
 namespace // {{{ helpers
 {
+
+using ASTConstNodeVariant = std::variant<
+	std::monostate,
+	ImportDirective const*,
+	ContractDefinition const*,
+	StructDefinition const*,
+	EnumDefinition const*,
+	EnumValue const*,
+	FunctionDefinition const*,
+	VariableDeclaration const*,
+	ModifierDefinition const*,
+	EventDefinition const*,
+	ErrorDefinition const*,
+	Identifier const*,
+	MemberAccess const*,
+	Literal const*
+>;
+
+class ASTConstNodeVariantCreator: public ASTConstVisitor
+{
+public:
+	static ASTConstNodeVariant get(ASTNode const* _node)
+	{
+		ASTConstNodeVariantCreator creator;
+		_node->accept(creator);
+		return creator.m_variant;
+	}
+
+protected:
+	template <typename T>
+	bool assign(T const& _node)
+	{
+		m_variant = ASTConstNodeVariant(&_node);
+		return false;
+	}
+
+	bool visit(ImportDirective const& _node) override { return assign(_node); }
+	bool visit(ContractDefinition const& _node) override { return assign(_node); }
+	bool visit(StructDefinition const& _node) override { return assign(_node); }
+	bool visit(EnumDefinition const& _node) override { return assign(_node); }
+	bool visit(EnumValue const& _node) override { return assign(_node); }
+	bool visit(FunctionDefinition const& _node) override { return assign(_node); }
+	bool visit(VariableDeclaration const& _node) override { return assign(_node); }
+	bool visit(ModifierDefinition const& _node) override { return assign(_node); }
+	bool visit(EventDefinition const& _node) override { return assign(_node); }
+	bool visit(ErrorDefinition const& _node) override { return assign(_node); }
+	bool visit(Identifier const& _node) override { return assign(_node); }
+	bool visit(Literal const& _node) override { return assign(_node); }
+	bool visit(MemberAccess const& _node) override { return assign(_node); }
+
+protected:
+	bool visitNode(ASTNode const&) override { return false; }
+
+private:
+	ASTConstNodeVariant m_variant = std::monostate{};
+};
+
+struct VisitorFallbackMatch
+{
+	bool fallbackMatched = false;
+	template<typename T> constexpr void operator()(T&&) noexcept {
+		printf("Fallback shit!\n");
+		fallbackMatched = true; }
+};
+
+template <typename... Ts>
+bool matchASTConstNode(ASTNode const* _node, Ts... _ts)
+{
+	VisitorFallbackMatch fallbackMatch;
+	auto var = ASTConstNodeVariantCreator::get(_node);
+	std::visit(
+		GenericVisitor{
+			std::ref(fallbackMatch),
+			std::forward<Ts>(_ts)...
+		},
+		var //ASTConstNodeVariantCreator::get(_node)
+	);
+	return !fallbackMatch.fallbackMatched;
+}
 
 string toFileURI(boost::filesystem::path const& _path)
 {
@@ -154,6 +235,7 @@ LanguageServer::LanguageServer(Logger _logger, std::unique_ptr<Transport> _trans
 		{"textDocument/didChange", bind(&LanguageServer::handle_textDocument_didChange, this, _1, _2)},
 		{"textDocument/didClose", [](auto, auto) {/*nothing for now*/}},
 		{"textDocument/definition", bind(&LanguageServer::handle_textDocument_definition, this, _1, _2)},
+		{"textDocument/implementation", bind(&LanguageServer::handle_textDocument_implementation, this, _1, _2)},
 		{"textDocument/documentHighlight", bind(&LanguageServer::handle_textDocument_highlight, this, _1, _2)},
 		{"textDocument/hover", bind(&LanguageServer::handle_textDocument_hover, this, _1, _2)},
 		{"textDocument/references", bind(&LanguageServer::handle_textDocument_references, this, _1, _2)},
@@ -205,7 +287,7 @@ void LanguageServer::documentContentUpdated(string const& _path, LineColumnRange
 	auto file = m_fileReader->sourceCodes().find(_path);
 	if (file == m_fileReader->sourceCodes().end())
 	{
-		log("LanguageServer: File to be modified not opened \"{}\"", _path);
+		trace("LanguageServer: File to be modified not opened \"{}\"", _path);
 		return;
 	}
 
@@ -222,7 +304,7 @@ void LanguageServer::documentContentUpdated(string const& _path, string const& _
 	auto file = m_fileReader->sourceCodes().find(_path);
 	if (file == m_fileReader->sourceCodes().end())
 	{
-		log("LanguageServer: File to be modified not opened \"" + _path + "\"");
+		trace("LanguageServer: File to be modified not opened \"" + _path + "\"");
 		return;
 	}
 
@@ -233,7 +315,7 @@ void LanguageServer::documentContentUpdated(string const& _path, string const& _
 
 frontend::ReadCallback::Result LanguageServer::readFile(string const& _kind, string const& _path)
 {
-	log("readFile: " + _path);
+	trace("readFile: " + _path);
 	return m_fileReader->readFile(_kind, _path);
 }
 
@@ -267,7 +349,7 @@ bool LanguageServer::compile(std::string const& _path)
 		log("source code not found for path: " + _path);
 		return false;
 	}
-	log("compile: " + _path + " (" + i->second + ")");
+	trace("compile: " + _path + " (" + i->second + ")");
 
 	m_compilerStack.reset();
 	m_compilerStack = make_unique<CompilerStack>(bind(&FileReader::readFile, ref(*m_fileReader), _1, _2));
@@ -670,6 +752,7 @@ void LanguageServer::handle_initialize(MessageID _id, Json::Value const& _args)
 	replyArgs["capabilities"]["textDocumentSync"]["openClose"] = true;
 	replyArgs["capabilities"]["textDocumentSync"]["change"] = 2; // 0=none, 1=full, 2=incremental
 	replyArgs["capabilities"]["definitionProvider"] = true;
+	replyArgs["capabilities"]["implementationProvider"] = true;
 	replyArgs["capabilities"]["documentHighlightProvider"] = true;
 	replyArgs["capabilities"]["referencesProvider"] = true;
 
@@ -757,14 +840,24 @@ void LanguageServer::handle_textDocument_didChange(MessageID /*_id*/, Json::Valu
 		compileSource(path);
 }
 
+void LanguageServer::handle_textDocument_implementation(MessageID _id, Json::Value const& _args)
+{
+	handleGotoDefAndImpl(_id, _args, "implementation");
+}
+
 void LanguageServer::handle_textDocument_definition(MessageID _id, Json::Value const& _args)
+{
+	handleGotoDefAndImpl(_id, _args, "definition");
+}
+
+void LanguageServer::handleGotoDefAndImpl(MessageID _id, Json::Value const& _args, string const& _logPrefix)
 {
 	DocumentPosition const dpos = extractDocumentPosition(_args);
 
 	// source should be compiled already
 	solAssert(m_compilerStack.get() != nullptr, "");
 
-	log("definition: dpos.path: " + dpos.path);
+	trace(fmt::format("{}: dpos.path: {}", _logPrefix, dpos.path));
 
 	auto const file = m_fileReader->sourceCodes().find(dpos.path);
 	if (file == m_fileReader->sourceCodes().end())
@@ -777,7 +870,7 @@ void LanguageServer::handle_textDocument_definition(MessageID _id, Json::Value c
 	auto const sourceNode = findASTNode(dpos.position, dpos.path);
 	if (!sourceNode)
 	{
-		trace("gotoDefinition: AST node not found for "s + to_string(dpos.position.line) + ":" + to_string(dpos.position.column));
+		trace(_logPrefix + ": AST node not found for "s + to_string(dpos.position.line) + ":" + to_string(dpos.position.column));
 		// Could not infer AST node from given source location.
 		Json::Value emptyResponse = Json::arrayValue;
 		m_client->reply(_id, emptyResponse);
@@ -785,45 +878,51 @@ void LanguageServer::handle_textDocument_definition(MessageID _id, Json::Value c
 	}
 
 	vector<SourceLocation> locations;
-	if (auto const importDirective = dynamic_cast<ImportDirective const*>(sourceNode))
-	{
-		auto const& path = *importDirective->annotation().absolutePath;
 
-		auto const i = m_fileReader->sourceCodes().find(path);
-		if (i != m_fileReader->sourceCodes().end())
-			locations.emplace_back(SourceLocation{0, 0, make_shared<CharStream>("", path)});
-		else
-			trace(fmt::format("gotoDefinition: (importDirective) full path mapping not found for {}: {}\n", importDirective->path(), path));
-	}
-	else if (auto const n = dynamic_cast<frontend::MemberAccess const*>(sourceNode))
-	{
-		// For scope members, jump to the naming symbol of the referencing declaration of this member.
-		auto const declaration = n->annotation().referencedDeclaration;
-		auto const location = declarationPosition(declaration);
-		if (location.has_value())
-			locations.emplace_back(location.value());
-		else
-			trace("gotoDefinition: declaration not found.");
-	}
-	else if (auto const sourceIdentifier = dynamic_cast<Identifier const*>(sourceNode))
-	{
-		// For identifiers, jump to the naming symbol of the definition of this identifier.
-		if (Declaration const* decl = sourceIdentifier->annotation().referencedDeclaration)
-			if (auto location = declarationPosition(decl); location.has_value())
-				locations.emplace_back(move(location.value()));
-		// if (auto location = declarationPosition(sourceIdentifier->annotation().referencedDeclaration); location.has_value())
-		// 	locations.emplace_back(move(location.value()));
+	bool const handled = matchASTConstNode(
+		sourceNode,
+		[&](ImportDirective const* importDirective)
+		{
+			auto const& path = *importDirective->annotation().absolutePath;
 
-		for (auto const declaration: sourceIdentifier->annotation().candidateDeclarations)
-			if (auto location = declarationPosition(declaration); location.has_value())
-				locations.emplace_back(move(location.value()));
-	}
-	else
-		trace("gotoDefinition: Symbol is not an identifier. "s + typeid(*sourceNode).name());
+			auto const i = m_fileReader->sourceCodes().find(path);
+			if (i != m_fileReader->sourceCodes().end())
+				locations.emplace_back(SourceLocation{0, 0, make_shared<CharStream>("", path)});
+			else
+				trace(fmt::format(_logPrefix + ": (importDirective) full path mapping not found for {}: {}\n", importDirective->path(), path));
+		},
+		[&](MemberAccess const* memberAccess)
+		{
+			// For scope members, jump to the naming symbol of the referencing declaration of this member.
+			auto const declaration = memberAccess->annotation().referencedDeclaration;
+			auto const location = declarationPosition(declaration);
+			if (location.has_value())
+				locations.emplace_back(location.value());
+			else
+				trace(_logPrefix + ": declaration not found.");
+		},
+		[&](Identifier const* sourceIdentifier)
+		{
+			// For identifiers, jump to the naming symbol of the definition of this identifier.
+			if (Declaration const* decl = sourceIdentifier->annotation().referencedDeclaration)
+				if (auto location = declarationPosition(decl); location.has_value())
+					locations.emplace_back(move(location.value()));
+			// if (auto location = declarationPosition(sourceIdentifier->annotation().referencedDeclaration); location.has_value())
+			// 	locations.emplace_back(move(location.value()));
+
+			for (auto const declaration: sourceIdentifier->annotation().candidateDeclarations)
+				if (auto location = declarationPosition(declaration); location.has_value())
+					locations.emplace_back(move(location.value()));
+		}
+	);
+
+	if (!handled)
+		trace(_logPrefix + ": Symbol is not an identifier. "s + typeid(*sourceNode).name());
 
 	Json::Value reply = Json::arrayValue;
 	for (SourceLocation const& location: locations)
 		reply.append(toJson(m_basePath, location));
+
 	m_client->reply(_id, reply);
 }
 
@@ -843,7 +942,7 @@ void LanguageServer::handle_textDocument_hover(MessageID _id, Json::Value const&
 
 	reply["range"] = toJsonRange(sourceNode->location());
 	reply["contents"]["kind"] = "markdown";
-	reply["contents"]["value"] = ""; // Will be the Natspec documentation (converted to markdown) later.
+	reply["contents"]["value"] = "# TODO\n\n**TODO**: *here be dragons.*"; // Will be the Natspec documentation (converted to markdown) later.
 
 	m_client->reply(_id, reply);
 }
@@ -851,11 +950,10 @@ void LanguageServer::handle_textDocument_hover(MessageID _id, Json::Value const&
 void LanguageServer::handle_textDocument_highlight(MessageID _id, Json::Value const& _args)
 {
 	auto const dpos = extractDocumentPosition(_args);
-	log("highlight: {}:{}:{}", dpos.path, dpos.position.line, dpos.position.column);
+	trace("highlight: {}:{}:{}", dpos.path, dpos.position.line, dpos.position.column);
 
 	if (!m_compilerStack)
 		compile(dpos.path);
-
 	Json::Value jsonReply = Json::arrayValue;
 	for (DocumentHighlight const& highlight: semanticHighlight(dpos))
 	{

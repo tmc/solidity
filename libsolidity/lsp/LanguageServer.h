@@ -97,9 +97,11 @@ protected:
 	void handle_textDocument_didOpen(MessageID _id, Json::Value const& _args);
 	void handle_textDocument_didChange(MessageID _id, Json::Value const& _args);
 	void handle_textDocument_definition(MessageID _id, Json::Value const& _args);
+	void handle_textDocument_implementation(MessageID _id, Json::Value const& _args);
 	void handle_textDocument_hover(MessageID _id, Json::Value const& _args);
 	void handle_textDocument_highlight(MessageID _id, Json::Value const& _args);
 	void handle_textDocument_references(MessageID _id, Json::Value const& _args);
+	void handleGotoDefAndImpl(MessageID _id, Json::Value const& _args, std::string const& _logPrefix);
 
 	// {{{ Client-to-Server messages
 	/// Invoked when the server user-supplied configuration changes (initiated by the client).
@@ -129,6 +131,12 @@ protected:
 
 	/// Logs a verbose trace message (should used for logging messages that are helpful to the client).
 	void trace(std::string const& _message);
+
+	template <typename... Args>
+	void trace(std::string_view _msg, Args... _args)
+	{
+		trace(fmt::format(_msg, std::forward<Args>(_args)...));
+	}
 
 	frontend::ReadCallback::Result readFile(std::string const&, std::string const&);
 
