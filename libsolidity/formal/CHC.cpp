@@ -1007,19 +1007,35 @@ set<unsigned> CHC::transactionVerificationTargetsIds(ASTNode const* _txRoot)
 	return verificationTargetsIds;
 }
 
-bool CHC::abstractAsNondet(FunctionDefinition const& _function)
+optional<CHC::CHCNatspecOption> CHC::natspecOptionFromString(string const& _option)
 {
+	static map<string, CHCNatspecOption> options{
+		{"abstract-function-nondet", CHCNatspecOption::AbstractFunctionNondet}
+	};
+	if (options.count(_option))
+		return options.at(_option);
+	return {};
+}
+
+set<CHC::CHCNatspecOption> CHC::smtNatspecTags(FunctionDefinition const& _function)
+{
+	set<CHC::CHCNatspecOption> options;
 	auto const& tags = _function.annotation().docTags;
 	string smtStr = "custom:smtchecker";
 	for (auto it = tags.find(smtStr); it != tags.end() && it->first == smtStr; ++it)
 	{
 		string const& content = it->second.content;
-		if (content == "abstract-function-nondet")
-			return true;
+		if (auto option = natspecOptionFromString(content))
+			options.insert(*option);
 		else
-			m_errorReporter.warning(3130_error, _function.location(), "Unknown option for \"custom:smtchecker\": \"" + content + "\"");
+			m_errorReporter.warning(3130_error, _function.location(), "Unknown option for \"" + smtStr + "\": \"" + content + "\"");
 	}
-	return false;
+	return options;
+}
+
+bool CHC::abstractAsNondet(FunctionDefinition const& _function)
+{
+	return smtNatspecTags(_function).count(CHCNatspecOption::AbstractFunctionNondet);
 }
 
 SortPointer CHC::sort(FunctionDefinition const& _function)
