@@ -207,7 +207,7 @@ public:
 	/// signature: (array, newLen)
 	std::string resizeArrayFunction(ArrayType const& _type);
 
-	/// @returns the name of a function that zeros all storage array elements from `start_index` to `len` (excluding)
+	/// @returns the name of a function that zeroes all storage array elements from `start_index` to `len` (excluding).
 	/// Assumes that `len` is the array length. Does nothing if `start_index >= len`. Does not modify the stored length.
 	/// signature: (array, len, start_index)
 	std::string cleanUpStorageArrayEndFunction(ArrayType const& _type);
