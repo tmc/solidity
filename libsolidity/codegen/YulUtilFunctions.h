@@ -542,7 +542,7 @@ private:
 	/// it will not copy elements in case of transformation to short byte array, and will not change array length
 	/// In case of pos is greater than len, doesn't do anything
 	/// In case of short byte array (< 32 bytes) doesn't do anything
-	/// Cleans up from first unused slot
+	/// If the first slot to be cleaned up is partially occupied, does not touch it. Cleans up only completely unused slots.
 	/// signature: (array, len, pos)
 	std::string cleanUpDynamicByteArrayEndSlotsFunction(ArrayType const& _type);
 
