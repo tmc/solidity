@@ -1251,7 +1251,7 @@ string YulUtilFunctions::cleanUpDynamicByteArrayEndSlotsFunction(ArrayType const
 	solAssert(_type.isByteArray(), "");
 	solAssert(_type.isDynamicallySized(), "");
 
-	string functionName = "clean_up_byte_array_end_slots_" + _type.identifier();
+	string functionName = "clean_up_bytearray_end_slots_" + _type.identifier();
 	return m_functionCollector.createFunction(functionName, [&](vector<string>& _args, vector<string>&) {
 		_args = {"array", "len", "pos"};
 		return Whiskers(R"(
