@@ -1191,7 +1191,7 @@ string YulUtilFunctions::cleanUpStorageArrayEndFunction(ArrayType const& _type)
 	solAssert(!_type.isByteArray(), "");
 	solUnimplementedAssert(_type.baseType()->storageBytes() <= 32, "");
 
-	string functionName = "cleanup_array_end_" + _type.identifier();
+	string functionName = "cleanup_storage_array_end_" + _type.identifier();
 	return m_functionCollector.createFunction(functionName, [&](vector<string>& _args, vector<string>&) {
 		_args = {"array", "len", "pos"};
 		return Whiskers(R"(
